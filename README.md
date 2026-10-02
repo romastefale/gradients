@@ -1,3 +1,5 @@
+<img src="header.png" alt="Gradients" width="100%">
+
 # Gradients
 
 Gradientes suaves para qualquer tela.
