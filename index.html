@@ -264,8 +264,8 @@
         hue: random() * 360,
         x: random() * SIDE,
         y: random() * SIDE,
-        rx: SIDE * (0.225 + random() * 0.275),
-        ry: SIDE * (0.175 + random() * 0.225),
+        rx: 900 + random() * 1100,
+        ry: 700 + random() * 900,
       }));
     }
 
@@ -287,9 +287,7 @@
         const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
         return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
       }).join("");
-      const blur = (SIDE * 0.05 / Math.SQRT2).toFixed(1);
-      const pad = Math.round(SIDE * 0.2);
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" filterUnits="userSpaceOnUse" x="${view.sx - pad}" y="${view.sy - pad}" width="${view.sw + pad * 2}" height="${view.sh + pad * 2}"><feGaussianBlur stdDeviation="${blur}"/><feGaussianBlur stdDeviation="${blur}"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
     }
 
     function paint() {
