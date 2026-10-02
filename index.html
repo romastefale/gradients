@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f3f1" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#f4f3f1" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f4f3f1">
   <title>Gradients</title>
   <style>
     :root {
@@ -277,20 +276,22 @@
       const root = document.documentElement;
       root.dataset.theme = state.light ? "light" : "dark";
       const view = frame();
+      root.style.colorScheme = state.light ? "light" : "dark";
+      root.style.backgroundColor = solid;
+      document.body.style.backgroundColor = solid;
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
-      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`);
+      const field = `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`;
+      root.style.setProperty("--field", field);
+      const board = document.getElementById("frame");
+      board.style.backgroundColor = solid;
+      board.style.backgroundImage = field;
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
-      document.documentElement.style.backgroundColor = solid;
-      document.body.style.backgroundColor = solid;
       document.querySelectorAll('meta[name="theme-color"]').forEach((node) => node.remove());
-      for (const media of ["(prefers-color-scheme: light)", "(prefers-color-scheme: dark)"]) {
-        const meta = document.createElement("meta");
-        meta.name = "theme-color";
-        meta.content = solid;
-        meta.media = media;
-        document.head.append(meta);
-      }
+      const meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      meta.setAttribute("content", solid);
+      document.head.prepend(meta);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
         const label = button.dataset.aspect;
