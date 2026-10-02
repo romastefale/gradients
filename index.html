@@ -19,6 +19,11 @@
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Gradients">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="description" content="Gradientes suaves para qualquer tela">
   <meta property="og:title" content="Gradients">
   <meta property="og:description" content="Gradientes suaves para qualquer tela">
@@ -728,6 +733,9 @@ html::before {
     fresh();
     renderSquare();
     place();
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register(new URL("sw.js", document.baseURI).href).catch(function () {});
+    }
   </script>
 </body>
 </html>
