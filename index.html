@@ -74,7 +74,7 @@
       width: 100%; aspect-ratio: var(--ratio); border-radius: 12px;
       overflow: hidden; background: var(--edge);
     }
-    .frame img { width: 100%; height: 100%; display: block; }
+    .frame img { width: 100%; height: 100%; display: block; object-fit: cover; }
     .meta {
       display: flex; align-items: center; gap: 6px;
       color: var(--bar-sub); font-size: 11px; font-weight: 500; line-height: 1;
@@ -340,6 +340,15 @@
       return Math.max(view.sw, view.sh);
     }
 
+    function screenSide() {
+      const board = document.querySelector(".shot");
+      const rect = board.getBoundingClientRect();
+      const css = Math.max(rect.width, rect.height);
+      if (!css) return 960;
+      const pixels = Math.ceil(css * (window.devicePixelRatio || 1));
+      return Math.max(480, Math.min(960, pixels));
+    }
+
     async function renderPng(view, longSide, signal) {
       const size = fitted(view, longSide);
       const response = await fetch(renderEndpoint(), {
@@ -358,20 +367,18 @@
       if (inflight) inflight.abort();
       const controller = new AbortController();
       inflight = controller;
-      const shot = document.getElementById("shot");
-      const previous = shot.dataset.url || "";
-      shot.removeAttribute("src");
-      shot.dataset.url = "";
-      if (previous) URL.revokeObjectURL(previous);
       const view = frame();
       let blob;
-      try { blob = await renderPng(view, fullSide(view), controller.signal); }
+      try { blob = await renderPng(view, screenSide(), controller.signal); }
       catch (e) { return; }
       if (token !== shown) return;
       picture = blob;
       const url = URL.createObjectURL(blob);
+      const shot = document.getElementById("shot");
+      const previous = shot.dataset.url || "";
       shot.src = url;
       shot.dataset.url = url;
+      if (previous) URL.revokeObjectURL(previous);
     }
 
     function pageFile(dataUrl) {
@@ -410,7 +417,6 @@
     }
 
     async function pngFile() {
-      if (picture) return picture;
       const view = frame();
       return renderPng(view, fullSide(view));
     }
@@ -440,7 +446,7 @@
           const png = await pngFile();
           if (png) download("gradient.png", png);
         } else {
-          const dataUrl = await blobDataUrl(picture || await renderPng(frame(), fullSide(frame())));
+          const dataUrl = await blobDataUrl(picture || await renderPng(frame(), screenSide()));
           if (kind === "html") download("gradient.html", new Blob([pageFile(dataUrl)], { type: "text/html" }));
           if (kind === "css") download("gradient.css", new Blob([cssFile(dataUrl)], { type: "text/css" }));
         }
