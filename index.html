@@ -47,13 +47,38 @@
       position: fixed; inset: 0; display: grid; place-items: center;
       padding: calc(84px + env(safe-area-inset-top, 0px)) 16px 20px;
     }
-    .frame {
-      background: var(--edge) var(--field) center / cover no-repeat;
-      aspect-ratio: var(--ratio);
-      width: min(calc(100vw - 32px), calc((100dvh - 124px) * var(--ratio)));
-      max-height: calc(100dvh - 124px);
+    .shot {
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+      width: min(calc(100vw - 48px), calc((100dvh - 176px) * var(--ratio)));
+    }
+    .plate {
+      width: 100%; padding: 7px; border-radius: 18px;
       box-shadow: inset 0 0 0 1px var(--bar-edge);
     }
+    .frame {
+      width: 100%; aspect-ratio: var(--ratio); border-radius: 12px;
+      background: var(--edge) var(--field) center / cover no-repeat;
+    }
+    .meta {
+      display: flex; align-items: center; gap: 6px;
+      color: var(--bar-sub); font-size: 11px; font-weight: 500; line-height: 1;
+    }
+    .mini { position: relative; }
+    .meta button {
+      appearance: none; border: 0; margin: 0; background: transparent; color: inherit;
+      font: inherit; height: 20px; padding: 0 7px; border-radius: 999px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .meta button[aria-expanded="true"], .mini-menu button:hover { background: var(--hover-bg); }
+    .mini-menu[hidden] { display: none; }
+    .mini-menu {
+      position: absolute; z-index: 3; left: 50%; bottom: calc(100% + 6px);
+      transform: translateX(-50%); display: flex; gap: 2px; padding: 3px;
+      border-radius: 999px; background: var(--picker-bg);
+      box-shadow: inset 0 0 0 1px var(--bar-edge);
+      -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    }
+    .mini-menu button { height: 22px; padding: 0 8px; color: var(--bar-text); }
     .site-header {
       position: fixed; z-index: 70; left: 0; right: 0;
       top: calc(12px + env(safe-area-inset-top, 0px));
@@ -120,7 +145,22 @@
   </style>
 </head>
 <body>
-  <main class="stage"><div class="frame" id="frame"></div></main>
+  <main class="stage">
+    <div class="shot">
+      <div class="plate"><div class="frame" id="frame"></div></div>
+      <div class="meta">
+        <span id="caption"></span>
+        <span class="mini">
+          <button type="button" id="save2" aria-label="Download" aria-expanded="false" aria-controls="mini"></button>
+          <div class="mini-menu" id="mini" hidden>
+            <button type="button" data-kind="png">PNG</button>
+            <button type="button" data-kind="html">HTML</button>
+            <button type="button" data-kind="css">CSS</button>
+          </div>
+        </span>
+      </div>
+    </div>
+  </main>
   <header class="site-header">
     <div class="sh-anchor">
       <div class="sh-bar">
@@ -226,6 +266,7 @@
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
       root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, frame()))}")`);
+      document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
       document.querySelector('meta[name="theme-color"]').setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
@@ -293,7 +334,34 @@
 
     function closeMenu() {
       document.getElementById("menu").hidden = true;
+      document.getElementById("mini").hidden = true;
       document.getElementById("save").setAttribute("aria-expanded", "false");
+      document.getElementById("save2").setAttribute("aria-expanded", "false");
+    }
+
+    function toggleMenu(menuId, buttonId) {
+      const menu = document.getElementById(menuId);
+      const open = menu.hidden;
+      closeMenu();
+      if (!open) return;
+      menu.hidden = false;
+      document.getElementById(buttonId).setAttribute("aria-expanded", "true");
+    }
+
+    async function deliver(kind) {
+      closeMenu();
+      if (kind === "html") download("gradient.html", new Blob([pageFile()], { type: "text/html" }));
+      if (kind === "css") download("gradient.css", new Blob([cssFile()], { type: "text/css" }));
+      if (kind === "png") {
+        const buttons = [document.getElementById("save"), document.getElementById("save2")];
+        buttons.forEach((button) => { button.disabled = true; });
+        try {
+          const png = await pngFile();
+          if (png) download("gradient.png", png);
+        } finally {
+          buttons.forEach((button) => { button.disabled = false; });
+        }
+      }
     }
 
     const aspects = document.getElementById("aspects");
@@ -316,37 +384,20 @@
     };
     document.getElementById("again").innerHTML = ICON.again;
     document.getElementById("save").innerHTML = ICON.down;
+    document.getElementById("save2").innerHTML = ICON.down;
     document.getElementById("again").onclick = () => {
       state.seed = rand32();
       fresh();
       closeMenu();
       paint();
     };
-    document.getElementById("save").onclick = () => {
-      const menu = document.getElementById("menu");
-      const open = menu.hidden;
-      menu.hidden = !open;
-      document.getElementById("save").setAttribute("aria-expanded", open ? "true" : "false");
-    };
-    document.getElementById("menu").onclick = async (event) => {
-      const kind = event.target.closest("button")?.dataset.kind;
-      if (!kind) return;
-      closeMenu();
-      if (kind === "html") download("gradient.html", new Blob([pageFile()], { type: "text/html" }));
-      if (kind === "css") download("gradient.css", new Blob([cssFile()], { type: "text/css" }));
-      if (kind === "png") {
-        const button = document.getElementById("save");
-        button.disabled = true;
-        try {
-          const png = await pngFile();
-          if (png) download("gradient.png", png);
-        } finally {
-          button.disabled = false;
-        }
-      }
-    };
+    document.getElementById("save").onclick = () => toggleMenu("menu", "save");
+    document.getElementById("save2").onclick = () => toggleMenu("mini", "save2");
+    document.querySelectorAll("[data-kind]").forEach((button) => {
+      button.onclick = () => deliver(button.dataset.kind);
+    });
     document.addEventListener("pointerdown", (event) => {
-      if (!event.target.closest(".sh-anchor")) closeMenu();
+      if (!event.target.closest(".sh-anchor, .mini")) closeMenu();
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeMenu();
