@@ -3,7 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f3f1">
+  <script>
+    (function () {
+      var dark = false;
+      try { dark = sessionStorage.getItem("gradient-theme") === "dark"; } catch (e) {}
+      var color = dark ? "#141416" : "#f4f3f1";
+      var root = document.documentElement;
+      root.dataset.theme = dark ? "dark" : "light";
+      root.style.colorScheme = dark ? "dark" : "light";
+      root.style.backgroundColor = color;
+      document.write('<meta name="theme-color" content="' + color + '">');
+    })();
+  </script>
   <title>Gradients</title>
   <style>
     :root {
@@ -208,10 +219,20 @@
       down: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>',
     };
 
+    function stored(key) {
+      try { return sessionStorage.getItem(key); } catch (e) { return null; }
+    }
+    function store(key, value) {
+      try { sessionStorage.setItem(key, value); } catch (e) {}
+    }
+    function forget(key) {
+      try { sessionStorage.removeItem(key); } catch (e) {}
+    }
+    const savedAspect = stored("gradient-aspect");
     const state = {
-      light: true,
-      aspect: "1:1",
-      seed: 0,
+      light: stored("gradient-theme") !== "dark",
+      aspect: savedAspect || "1:1",
+      seed: Number(stored("gradient-seed")) || 0,
       blooms: [],
     };
 
@@ -287,11 +308,8 @@
       board.style.backgroundColor = solid;
       board.style.backgroundImage = field;
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
-      document.querySelectorAll('meta[name="theme-color"]').forEach((node) => node.remove());
-      const meta = document.createElement("meta");
-      meta.setAttribute("name", "theme-color");
-      meta.setAttribute("content", solid);
-      document.head.prepend(meta);
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
         const label = button.dataset.aspect;
@@ -407,13 +425,19 @@
     }
 
     document.getElementById("theme").onclick = () => {
-      state.light = !state.light;
-      paint();
+      store("gradient-theme", state.light ? "dark" : "light");
+      store("gradient-seed", String(state.seed));
+      store("gradient-aspect", state.aspect);
+      location.reload();
     };
     document.getElementById("again").innerHTML = ICON.again;
     document.getElementById("save").innerHTML = ICON.down;
     document.getElementById("save2").innerHTML = ICON.down;
-    document.getElementById("again").onclick = () => location.reload();
+    document.getElementById("again").onclick = () => {
+      forget("gradient-seed");
+      forget("gradient-aspect");
+      location.reload();
+    };
     document.getElementById("save").onclick = () => toggleMenu("menu", "save");
     document.getElementById("save2").onclick = () => toggleMenu("mini", "save2");
     document.querySelectorAll("[data-kind]").forEach((button) => {
@@ -431,7 +455,11 @@
       if (event.touches.length > 1) event.preventDefault();
     }, { passive: false });
 
-    state.seed = rand32();
+    if (!ASPECTS.some(([name]) => name === state.aspect || turned(name) === state.aspect)) state.aspect = "1:1";
+    if (!state.seed) state.seed = rand32();
+    store("gradient-theme", state.light ? "light" : "dark");
+    store("gradient-seed", String(state.seed));
+    store("gradient-aspect", state.aspect);
     fresh();
     paint();
   </script>
