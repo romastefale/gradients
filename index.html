@@ -251,8 +251,147 @@
       };
     }
 
-    function hsl(h, s, l) {
-      return `hsl(${Math.round(((h % 360) + 360) % 360)} ${s}% ${l}%)`;
+    function colorOf(hue) {
+      const s = (state.light ? 72 : 58) / 100;
+      const l = (state.light ? 58 : 42) / 100;
+      const a = s * Math.min(l, 1 - l);
+      const f = (n) => {
+        const k = (n + hue / 30) % 12;
+        return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      };
+      return [f(0), f(8), f(4)];
+    }
+
+    function srgbToLinear(c) {
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    }
+
+    function linearToSrgb(c) {
+      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+    }
+
+    function boxBlur(src, n, radius) {
+      const tmp = new Float32Array(src.length);
+      const out = new Float32Array(src.length);
+      const span = radius * 2 + 1;
+      for (let y = 0; y < n; y++) {
+        const row = y * n;
+        let acc = src[row] * (radius + 1);
+        for (let x = 0; x < radius; x++) acc += src[row + x];
+        for (let x = 0; x < n; x++) {
+          acc += src[row + Math.min(n - 1, x + radius)] - src[row + Math.max(0, x - radius - 1)];
+          tmp[row + x] = acc / span;
+        }
+      }
+      for (let x = 0; x < n; x++) {
+        let acc = tmp[x] * (radius + 1);
+        for (let y = 0; y < radius; y++) acc += tmp[y * n + x];
+        for (let y = 0; y < n; y++) {
+          acc += tmp[Math.min(n - 1, y + radius) * n + x] - tmp[Math.max(0, y - radius - 1) * n + x];
+          out[y * n + x] = acc / span;
+        }
+      }
+      return out;
+    }
+
+    function blurFast(src, n, sigma) {
+      const passes = 3;
+      const ideal = Math.sqrt((12 * sigma * sigma) / passes + 1);
+      let lower = Math.floor(ideal);
+      if (lower % 2 === 0) lower -= 1;
+      if (lower < 1) lower = 1;
+      const upper = lower + 2;
+      const count = Math.round((12 * sigma * sigma - passes * lower * lower - 4 * passes * lower - 3 * passes) / (-4 * lower - 4));
+      let cur = src;
+      for (let i = 0; i < passes; i++) {
+        const width = i < count ? upper : lower;
+        cur = boxBlur(cur, n, (width - 1) >> 1);
+      }
+      return cur;
+    }
+
+    function raster(view) {
+      const work = 384;
+      const scale = work / SIDE;
+      const sigma = 200 * scale;
+      const pad = Math.max(1, Math.ceil(sigma * 3));
+      const n = work + pad * 2;
+      const channel = [
+        new Float32Array(n * n),
+        new Float32Array(n * n),
+        new Float32Array(n * n),
+        new Float32Array(n * n),
+      ];
+      const alpha = state.light ? 0.85 : 0.75;
+      for (const bloom of state.blooms) {
+        const color = colorOf(bloom.hue);
+        const cx = pad + bloom.x * scale;
+        const cy = pad + bloom.y * scale;
+        const rx = bloom.rx * scale;
+        const ry = bloom.ry * scale;
+        const x0 = Math.max(0, Math.floor(cx - rx));
+        const x1 = Math.min(n - 1, Math.ceil(cx + rx));
+        const y0 = Math.max(0, Math.floor(cy - ry));
+        const y1 = Math.min(n - 1, Math.ceil(cy + ry));
+        for (let y = y0; y <= y1; y++) {
+          const dy = (y + 0.5 - cy) / ry;
+          const yy = dy * dy;
+          for (let x = x0; x <= x1; x++) {
+            const dx = (x + 0.5 - cx) / rx;
+            if (dx * dx + yy > 1) continue;
+            const i = y * n + x;
+            const da = channel[3][i];
+            const outA = alpha + da * (1 - alpha);
+            const inv = outA ? 1 / outA : 0;
+            for (let c = 0; c < 3; c++) {
+              channel[c][i] = (color[c] * alpha + channel[c][i] * da * (1 - alpha)) * inv;
+            }
+            channel[3][i] = outA;
+          }
+        }
+      }
+      for (let i = 0; i < n * n; i++) {
+        const cover = channel[3][i];
+        for (let c = 0; c < 3; c++) channel[c][i] = srgbToLinear(channel[c][i]) * cover;
+      }
+      const blurred = channel.map((band) => blurFast(band, n, sigma));
+      const solid = state.light ? [0xf4 / 255, 0xf3 / 255, 0xf1 / 255] : [0x14 / 255, 0x14 / 255, 0x16 / 255];
+      const cropX = Math.round(pad + view.sx * scale);
+      const cropY = Math.round(pad + view.sy * scale);
+      const cropW = Math.max(1, Math.round(view.sw * scale));
+      const cropH = Math.max(1, Math.round(view.sh * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = cropW;
+      canvas.height = cropH;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const image = ctx.createImageData(cropW, cropH);
+      const data = image.data;
+      for (let y = 0; y < cropH; y++) {
+        for (let x = 0; x < cropW; x++) {
+          const i = (cropY + y) * n + (cropX + x);
+          const cover = Math.min(1, Math.max(0, blurred[3][i]));
+          const inv = cover > 1e-5 ? 1 / cover : 0;
+          const o = (y * cropW + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            const straight = linearToSrgb(Math.min(1, Math.max(0, blurred[c][i] * inv)));
+            data[o + c] = Math.round((straight * cover + solid[c] * (1 - cover)) * 255);
+          }
+          data[o + 3] = 255;
+        }
+      }
+      ctx.putImageData(image, 0, 0);
+      return canvas;
+    }
+
+    let shown = 0;
+    let picture = null;
+
+    function showPicture() {
+      const token = ++shown;
+      const canvas = raster(frame());
+      if (token !== shown) return;
+      picture = canvas;
+      document.getElementById("shot").src = canvas.toDataURL("image/png");
     }
 
     function fresh() {
@@ -277,15 +416,6 @@
       }
       const sw = Math.round(SIDE * rw / rh);
       return { sx: Math.round((SIDE - sw) / 2), sy: 0, sw, sh: SIDE };
-    }
-
-    function markup(width, height, view) {
-      const solid = SOLID[state.light ? "light" : "dark"];
-      const shapes = state.blooms.map((bloom) => {
-        const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
-        return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
-      }).join("");
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
     }
 
     function paint() {
@@ -320,65 +450,25 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    let shown = 0;
-    let picture = null;
-    let inflight = null;
-
-    function renderEndpoint() {
-      return location.hostname.endsWith("railway.app") ? "/render.png" : "https://gradients.up.railway.app/render.png";
-    }
-
-    function fitted(view, longSide) {
-      const scale = longSide / Math.max(view.sw, view.sh);
-      return {
-        width: Math.max(1, Math.round(view.sw * scale)),
-        height: Math.max(1, Math.round(view.sh * scale)),
-      };
-    }
-
-    function fullSide(view) {
-      return Math.max(view.sw, view.sh);
-    }
-
-    function screenSide() {
-      const board = document.querySelector(".shot");
-      const rect = board.getBoundingClientRect();
-      const css = Math.max(rect.width, rect.height);
-      if (!css) return 960;
-      const pixels = Math.ceil(css * (window.devicePixelRatio || 1));
-      return Math.max(480, Math.min(960, pixels));
-    }
-
-    async function renderPng(view, longSide, signal) {
-      const size = fitted(view, longSide);
-      const response = await fetch(renderEndpoint(), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ svg: markup(size.width, size.height, view), width: size.width }),
-        signal,
-      });
-      if (!response.ok) throw new Error("render");
-      return response.blob();
-    }
-
-    async function showPicture() {
-      const token = ++shown;
-      picture = null;
-      if (inflight) inflight.abort();
-      const controller = new AbortController();
-      inflight = controller;
+    function fileCanvas() {
       const view = frame();
-      let blob;
-      try { blob = await renderPng(view, screenSide(), controller.signal); }
-      catch (e) { return; }
-      if (token !== shown) return;
-      picture = blob;
-      const url = URL.createObjectURL(blob);
-      const shot = document.getElementById("shot");
-      const previous = shot.dataset.url || "";
-      shot.src = url;
-      shot.dataset.url = url;
-      if (previous) URL.revokeObjectURL(previous);
+      const small = picture || raster(view);
+      const longSide = Math.max(view.sw, view.sh);
+      const width = Math.max(1, Math.round(view.sw * longSide / Math.max(view.sw, view.sh)));
+      const height = Math.max(1, Math.round(view.sh * longSide / Math.max(view.sw, view.sh)));
+      if (small.width === width && small.height === height) return small;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(small, 0, 0, width, height);
+      return canvas;
+    }
+
+    function pngFile() {
+      return new Promise((resolve) => fileCanvas().toBlob((blob) => resolve(blob), "image/png"));
     }
 
     function pageFile(dataUrl) {
@@ -407,20 +497,6 @@
 `;
     }
 
-    function blobDataUrl(blob) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    async function pngFile() {
-      const view = frame();
-      return renderPng(view, fullSide(view));
-    }
-
     function closeMenu() {
       document.getElementById("menu").hidden = true;
       document.getElementById("mini").hidden = true;
@@ -446,7 +522,7 @@
           const png = await pngFile();
           if (png) download("gradient.png", png);
         } else {
-          const dataUrl = await blobDataUrl(picture || await renderPng(frame(), screenSide()));
+          const dataUrl = (picture || raster(frame())).toDataURL("image/png");
           if (kind === "html") download("gradient.html", new Blob([pageFile(dataUrl)], { type: "text/html" }));
           if (kind === "css") download("gradient.css", new Blob([cssFile(dataUrl)], { type: "text/css" }));
         }
