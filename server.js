@@ -23,6 +23,9 @@ function png(svg, width) {
   return rendered.asPng();
 }
 
+let ticket = 0;
+let tail = Promise.resolve();
+
 const server = http.createServer((req, res) => {
   const origin = { "access-control-allow-origin": "*" };
   if (req.method === "OPTIONS") {
@@ -55,13 +58,35 @@ const server = http.createServer((req, res) => {
         if (!accepted(body.svg) || !Number.isInteger(width) || width < 1 || width > 4096) {
           throw new Error("bad");
         }
-        const file = png(body.svg, width);
-        res.writeHead(200, {
-          ...origin,
-          "content-type": "image/png",
-          "cache-control": "no-store",
-        });
-        res.end(file);
+        const mine = ++ticket;
+        tail = tail.then(() => {
+          if (mine !== ticket || res.writableEnded) {
+            if (!res.writableEnded) {
+              res.writeHead(409, origin);
+              res.end();
+            }
+            return;
+          }
+          try {
+            const file = png(body.svg, width);
+            if (mine !== ticket || res.writableEnded) {
+              if (!res.writableEnded) {
+                res.writeHead(409, origin);
+                res.end();
+              }
+              return;
+            }
+            res.writeHead(200, {
+              ...origin,
+              "content-type": "image/png",
+              "cache-control": "no-store",
+            });
+            res.end(file);
+          } catch (err) {
+            if (!res.headersSent) res.writeHead(400, { ...origin, "content-type": "text/plain" });
+            if (!res.writableEnded) res.end("render failed");
+          }
+        }).then(() => {}, () => {});
       } catch (err) {
         if (!res.headersSent) res.writeHead(400, { ...origin, "content-type": "text/plain" });
         res.end("render failed");

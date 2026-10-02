@@ -320,8 +320,9 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    const PREVIEW = 1600;
     let shown = 0;
+    let picture = null;
+    let inflight = null;
 
     function renderEndpoint() {
       return location.hostname.endsWith("railway.app") ? "/render.png" : "https://gradients.up.railway.app/render.png";
@@ -335,12 +336,17 @@
       };
     }
 
-    async function renderPng(view, longSide) {
+    function fullSide(view) {
+      return Math.max(view.sw, view.sh);
+    }
+
+    async function renderPng(view, longSide, signal) {
       const size = fitted(view, longSide);
       const response = await fetch(renderEndpoint(), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ svg: markup(size.width, size.height, view), width: size.width }),
+        signal,
       });
       if (!response.ok) throw new Error("render");
       return response.blob();
@@ -348,16 +354,24 @@
 
     async function showPicture() {
       const token = ++shown;
-      const view = frame();
-      let blob;
-      try { blob = await renderPng(view, PREVIEW); } catch (e) { return; }
-      if (token !== shown) return;
-      const url = URL.createObjectURL(blob);
+      picture = null;
+      if (inflight) inflight.abort();
+      const controller = new AbortController();
+      inflight = controller;
       const shot = document.getElementById("shot");
       const previous = shot.dataset.url || "";
+      shot.removeAttribute("src");
+      shot.dataset.url = "";
+      if (previous) URL.revokeObjectURL(previous);
+      const view = frame();
+      let blob;
+      try { blob = await renderPng(view, fullSide(view), controller.signal); }
+      catch (e) { return; }
+      if (token !== shown) return;
+      picture = blob;
+      const url = URL.createObjectURL(blob);
       shot.src = url;
       shot.dataset.url = url;
-      if (previous) URL.revokeObjectURL(previous);
     }
 
     function pageFile(dataUrl) {
@@ -396,8 +410,9 @@
     }
 
     async function pngFile() {
+      if (picture) return picture;
       const view = frame();
-      return renderPng(view, Math.max(view.sw, view.sh));
+      return renderPng(view, fullSide(view));
     }
 
     function closeMenu() {
@@ -425,7 +440,7 @@
           const png = await pngFile();
           if (png) download("gradient.png", png);
         } else {
-          const dataUrl = await blobDataUrl(await renderPng(frame(), PREVIEW));
+          const dataUrl = await blobDataUrl(picture || await renderPng(frame(), fullSide(frame())));
           if (kind === "html") download("gradient.html", new Blob([pageFile(dataUrl)], { type: "text/html" }));
           if (kind === "css") download("gradient.css", new Blob([cssFile(dataUrl)], { type: "text/css" }));
         }
