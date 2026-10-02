@@ -20,6 +20,7 @@
       --picker-bg: rgba(242, 243, 247, .9);
       --glass-ease: cubic-bezier(.2, .8, .2, 1);
       --edge: #f4f3f1;
+      color-scheme: light;
       --screen-inset: 12px;
       --hair-gap: 9px;
     }
@@ -36,6 +37,7 @@
       --hover-bg: rgba(255, 255, 255, .07);
       --picker-bg: rgba(22, 22, 26, .88);
       --edge: #141416;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
@@ -278,7 +280,10 @@
       root.style.setProperty("--ratio", String(view.sw / view.sh));
       root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`);
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
-      document.querySelector('meta[name="theme-color"]').setAttribute("content", solid);
+      const theme = document.querySelector('meta[name="theme-color"]');
+      const next = theme.cloneNode();
+      next.setAttribute("content", solid);
+      theme.replaceWith(next);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
         const label = button.dataset.aspect;
