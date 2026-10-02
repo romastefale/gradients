@@ -38,13 +38,16 @@
       --edge: #141416;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; }
-    html { background: var(--edge); color: var(--bar-text); touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+    html { background: var(--edge); color: var(--bar-text); touch-action: none; -webkit-text-size-adjust: 100%; }
     body {
+      position: fixed; inset: 0; width: 100%;
       min-height: 100dvh;
       background: var(--edge);
       font-family: system-ui, -apple-system, sans-serif;
+      touch-action: none;
     }
+    button { touch-action: manipulation; }
     .stage {
       position: fixed; inset: 0; display: grid; place-items: center;
       padding: calc(84px + env(safe-area-inset-top, 0px)) max(var(--screen-inset), env(safe-area-inset-right, 0px)) 20px max(var(--screen-inset), env(safe-area-inset-left, 0px));
@@ -414,6 +417,11 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeMenu();
     });
+    document.addEventListener("gesturestart", (event) => event.preventDefault(), { passive: false });
+    document.addEventListener("gesturechange", (event) => event.preventDefault(), { passive: false });
+    document.addEventListener("touchmove", (event) => {
+      if (event.touches.length > 1) event.preventDefault();
+    }, { passive: false });
 
     state.seed = rand32();
     fresh();
