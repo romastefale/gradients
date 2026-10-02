@@ -182,8 +182,8 @@
     </div>
   </header>
   <script>
-    const SIDE = 5120;
-    const UNIT = SIDE / 4000;
+    const OUT = 5120;
+    const SIDE = 4000;
     const SOLID = { light: "#f4f3f1", dark: "#141416" };
     const ASPECTS = [
       ["1:1", 1, 1],
@@ -239,8 +239,8 @@
         hue: random() * 360,
         x: random() * SIDE,
         y: random() * SIDE,
-        rx: (900 + random() * 1100) * UNIT,
-        ry: (700 + random() * 900) * UNIT,
+        rx: 900 + random() * 1100,
+        ry: 700 + random() * 900,
       }));
     }
 
@@ -262,8 +262,7 @@
         const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
         return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
       }).join("");
-      const blur = Math.round(200 * UNIT);
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
     }
 
     function paint() {
@@ -271,10 +270,11 @@
       const root = document.documentElement;
       root.dataset.theme = state.light ? "light" : "dark";
       const view = frame();
+      const size = outputSize(view);
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
-      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, frame()))}")`);
-      document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
+      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`);
+      document.getElementById("caption").textContent = `${state.aspect} · ${size.w}×${size.h}`;
       document.querySelector('meta[name="theme-color"]').setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
@@ -322,8 +322,16 @@
 `;
     }
 
+    function outputSize(view) {
+      return {
+        w: Math.round(view.sw * OUT / SIDE),
+        h: Math.round(view.sh * OUT / SIDE),
+      };
+    }
+
     async function pngFile() {
       const view = frame();
+      const size = outputSize(view);
       const svg = markup(view.sw, view.sh, view);
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       try {
@@ -334,9 +342,12 @@
           img.src = url;
         });
         const canvas = document.createElement("canvas");
-        canvas.width = view.sw;
-        canvas.height = view.sh;
-        canvas.getContext("2d").drawImage(image, 0, 0, view.sw, view.sh);
+        canvas.width = size.w;
+        canvas.height = size.h;
+        const context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        context.drawImage(image, 0, 0, size.w, size.h);
         return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
       } finally {
         URL.revokeObjectURL(url);
