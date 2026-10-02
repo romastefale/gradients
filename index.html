@@ -201,13 +201,7 @@
   <script>
     const SIDE = 4096;
     const SOLID = { light: "#f4f3f1", dark: "#141416" };
-    const ASPECTS = [
-      ["1:1", 1, 1],
-      ["16:9", 16, 9],
-      ["4:3", 4, 3],
-      ["3:2", 3, 2],
-      ["21:9", 21, 9],
-    ];
+    const ASPECTS = ["1:1", "16:9", "4:3", "3:2", "21:9"];
 
     function turned(label) {
       const [a, b] = label.split(":");
@@ -665,7 +659,7 @@ html::before {
     }
 
     const aspects = document.getElementById("aspects");
-    for (const [label] of ASPECTS) {
+    for (const label of ASPECTS) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.aspect = label;
@@ -711,7 +705,7 @@ html::before {
       if (event.touches.length > 1) event.preventDefault();
     }, { passive: false });
 
-    if (!ASPECTS.some(([name]) => name === state.aspect || turned(name) === state.aspect)) state.aspect = "1:1";
+    if (!ASPECTS.some((name) => name === state.aspect || turned(name) === state.aspect)) state.aspect = "1:1";
     if (!state.seed) state.seed = rand32();
     store("gradient-theme", state.light ? "light" : "dark");
     store("gradient-seed", String(state.seed));
