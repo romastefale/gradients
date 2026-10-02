@@ -187,12 +187,14 @@
     const ASPECTS = [
       ["1:1", 1, 1],
       ["16:9", 16, 9],
-      ["9:16", 9, 16],
       ["4:3", 4, 3],
-      ["3:4", 3, 4],
       ["3:2", 3, 2],
-      ["2:3", 2, 3],
     ];
+
+    function turned(label) {
+      const [a, b] = label.split(":");
+      return `${b}:${a}`;
+    }
     const ICON = {
       sun: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
       moon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
@@ -241,9 +243,9 @@
     }
 
     function frame() {
-      const found = ASPECTS.find((item) => item[0] === state.aspect) || ASPECTS[0];
-      const rw = found[1];
-      const rh = found[2];
+      const parts = state.aspect.split(":");
+      const rw = Number(parts[0]) || 1;
+      const rh = Number(parts[1]) || 1;
       if (rw >= rh) {
         const sh = Math.round(SIDE * rh / rw);
         return { sx: 0, sy: Math.round((SIDE - sh) / 2), sw: SIDE, sh };
@@ -273,7 +275,10 @@
       document.querySelector('meta[name="theme-color"]').setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
       document.querySelectorAll("#aspects button").forEach((button) => {
-        button.setAttribute("aria-current", button.dataset.aspect === state.aspect ? "true" : "false");
+        const label = button.dataset.aspect;
+        const on = state.aspect === label || state.aspect === turned(label);
+        button.setAttribute("aria-current", on ? "true" : "false");
+        button.textContent = on ? state.aspect : label;
       });
     }
 
@@ -374,7 +379,8 @@
       button.dataset.aspect = label;
       button.textContent = label;
       button.onclick = () => {
-        state.aspect = label;
+        const other = turned(label);
+        state.aspect = state.aspect === label || state.aspect === other ? turned(state.aspect) : label;
         closeMenu();
         paint();
       };
