@@ -400,12 +400,7 @@
     document.getElementById("again").innerHTML = ICON.again;
     document.getElementById("save").innerHTML = ICON.down;
     document.getElementById("save2").innerHTML = ICON.down;
-    document.getElementById("again").onclick = () => {
-      state.seed = rand32();
-      fresh();
-      closeMenu();
-      paint();
-    };
+    document.getElementById("again").onclick = () => location.reload();
     document.getElementById("save").onclick = () => toggleMenu("menu", "save");
     document.getElementById("save2").onclick = () => toggleMenu("mini", "save2");
     document.querySelectorAll("[data-kind]").forEach((button) => {
