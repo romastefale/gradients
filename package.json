@@ -1,7 +1,0 @@
-{
-  "name": "gradients",
-  "private": true,
-  "scripts": {
-    "start": "node server.js"
-  }
-}
