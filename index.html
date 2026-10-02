@@ -315,7 +315,235 @@
 
     const WORK = 512;
 
+    function compile(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) return null;
+      return shader;
+    }
+
+    function program(gl, vs, fs) {
+      const vert = compile(gl, gl.VERTEX_SHADER, vs);
+      const frag = compile(gl, gl.FRAGMENT_SHADER, fs);
+      if (!vert || !frag) return null;
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vert);
+      gl.attachShader(prog, frag);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+      return prog;
+    }
+
+    function target(gl, width, height, floatTex) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      if (floatTex) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) return null;
+      return { tex, fb, width, height };
+    }
+
+    function renderGpu() {
+      const shot = document.getElementById("shot");
+      shot.width = SIDE;
+      shot.height = SIDE;
+      const gl = shot.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, alpha: false });
+      if (!gl) return false;
+      const floatTex = !!gl.getExtension("EXT_color_buffer_float");
+      const tri = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const quad = gl.createBuffer();
+      const pass = program(gl, `#version 300 es
+        layout(location=0) in vec2 a;
+        out vec2 vUv;
+        void main() {
+          vUv = a * 0.5 + 0.5;
+          gl_Position = vec4(a, 0.0, 1.0);
+        }`, `#version 300 es
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 texel;
+        uniform float sigma;
+        uniform float radius;
+        in vec2 vUv;
+        out vec4 frag;
+        void main() {
+          vec4 acc = vec4(0.0);
+          float sum = 0.0;
+          for (int i = -80; i <= 80; i++) {
+            float o = float(i);
+            if (abs(o) > radius) continue;
+            float w = exp(-0.5 * o * o / (sigma * sigma));
+            acc += texture(src, vUv + texel * o) * w;
+            sum += w;
+          }
+          frag = acc / sum;
+        }`);
+      const linear = program(gl, `#version 300 es
+        layout(location=0) in vec2 a;
+        out vec2 vUv;
+        void main() {
+          vUv = a * 0.5 + 0.5;
+          gl_Position = vec4(a, 0.0, 1.0);
+        }`, `#version 300 es
+        precision highp float;
+        uniform sampler2D src;
+        in vec2 vUv;
+        out vec4 frag;
+        vec3 toLinear(vec3 c) {
+          return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+        }
+        void main() {
+          vec4 s = texture(src, vUv);
+          vec3 straight = s.a > 0.00001 ? s.rgb / s.a : vec3(0.0);
+          frag = vec4(toLinear(clamp(straight, 0.0, 1.0)) * s.a, s.a);
+        }`);
+      const finish = program(gl, `#version 300 es
+        layout(location=0) in vec2 a;
+        out vec2 vUv;
+        void main() {
+          vUv = a * 0.5 + 0.5;
+          gl_Position = vec4(a, 0.0, 1.0);
+        }`, `#version 300 es
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 inner;
+        uniform vec2 span;
+        uniform vec3 solid;
+        uniform float bayer[16];
+        in vec2 vUv;
+        out vec4 frag;
+        vec3 toSrgb(vec3 c) {
+          return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+        }
+        void main() {
+          vec2 uv = inner + vUv * span;
+          vec2 size = vec2(textureSize(src, 0));
+          vec2 pos = uv * size - 0.5;
+          vec2 frac = fract(pos);
+          vec2 base = (floor(pos) + 0.5) / size;
+          vec2 texel = 1.0 / size;
+          vec4 s00 = texture(src, base);
+          vec4 s10 = texture(src, base + vec2(texel.x, 0.0));
+          vec4 s01 = texture(src, base + vec2(0.0, texel.y));
+          vec4 s11 = texture(src, base + vec2(texel.x, texel.y));
+          vec4 sampleColor = mix(mix(s00, s10, frac.x), mix(s01, s11, frac.x), frac.y);
+          float cover = clamp(sampleColor.a, 0.0, 1.0);
+          vec3 lin = cover > 0.00001 ? sampleColor.rgb / cover : vec3(0.0);
+          vec3 color = toSrgb(clamp(lin, 0.0, 1.0)) * cover + solid * (1.0 - cover);
+          ivec2 px = ivec2(gl_FragCoord.xy);
+          float grain = bayer[((px.y & 3) * 4) + (px.x & 3)];
+          color += ((grain + 0.5) / 16.0 - 0.5) / 255.0;
+          frag = vec4(clamp(color, 0.0, 1.0), 1.0);
+        }`);
+      const ellipses = program(gl, `#version 300 es
+        layout(location=0) in vec2 a;
+        uniform vec2 center;
+        uniform vec2 radius;
+        out vec2 local;
+        void main() {
+          local = a;
+          gl_Position = vec4(center + a * radius, 0.0, 1.0);
+        }`, `#version 300 es
+        precision highp float;
+        uniform vec4 ink;
+        in vec2 local;
+        out vec4 frag;
+        void main() {
+          if (dot(local, local) > 1.0) discard;
+          frag = vec4(ink.rgb * ink.a, ink.a);
+        }`);
+      if (!pass || !linear || !finish || !ellipses) return false;
+      const scale = WORK / SIDE;
+      const sigma = 200.0 * scale;
+      const pad = Math.max(1, Math.ceil(sigma * 3.0));
+      const n = WORK + pad * 2;
+      const shapes = target(gl, n, n, false);
+      const lin = target(gl, n, n, floatTex);
+      const horizontal = target(gl, n, n, floatTex);
+      const vertical = target(gl, n, n, floatTex);
+      if (!shapes || !lin || !horizontal || !vertical) return false;
+      const alpha = state.light ? 0.85 : 0.75;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, shapes.fb);
+      gl.viewport(0, 0, n, n);
+      gl.disable(gl.BLEND);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(ellipses);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      for (const bloom of state.blooms) {
+        const color = colorOf(bloom.hue);
+        const px = pad + bloom.x * scale;
+        const py = pad + bloom.y * scale;
+        const cx = ((px + 0.5) / n) * 2 - 1;
+        const cy = 1 - ((py + 0.5) / n) * 2;
+        const rx = (bloom.rx * scale / n) * 2;
+        const ry = (bloom.ry * scale / n) * 2;
+        gl.uniform2f(gl.getUniformLocation(ellipses, "center"), cx, cy);
+        gl.uniform2f(gl.getUniformLocation(ellipses, "radius"), rx, ry);
+        gl.uniform4f(gl.getUniformLocation(ellipses, "ink"), color[0], color[1], color[2], alpha);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+      gl.disable(gl.BLEND);
+      function blit(prog, from, onto) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, onto ? onto.fb : null);
+        gl.viewport(0, 0, onto ? onto.width : SIDE, onto ? onto.height : SIDE);
+        gl.useProgram(prog);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, from.tex);
+        gl.uniform1i(gl.getUniformLocation(prog, "src"), 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, tri);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      blit(linear, shapes, lin);
+      gl.useProgram(pass);
+      gl.uniform1f(gl.getUniformLocation(pass, "sigma"), sigma);
+      gl.uniform1f(gl.getUniformLocation(pass, "radius"), sigma * 3.0);
+      gl.uniform2f(gl.getUniformLocation(pass, "texel"), 1 / n, 0);
+      blit(pass, lin, horizontal);
+      gl.uniform2f(gl.getUniformLocation(pass, "texel"), 0, 1 / n);
+      blit(pass, horizontal, vertical);
+      const solid = state.light ? [0xf4 / 255, 0xf3 / 255, 0xf1 / 255] : [0x14 / 255, 0x14 / 255, 0x16 / 255];
+      gl.useProgram(finish);
+      gl.uniform2f(gl.getUniformLocation(finish, "inner"), pad / n, pad / n);
+      gl.uniform2f(gl.getUniformLocation(finish, "span"), WORK / n, WORK / n);
+      gl.uniform3f(gl.getUniformLocation(finish, "solid"), solid[0], solid[1], solid[2]);
+      gl.uniform1fv(gl.getUniformLocation(finish, "bayer"), new Float32Array([0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]));
+      blit(finish, vertical, null);
+      return gl.getError() === gl.NO_ERROR;
+    }
+
     function renderSquare() {
+      if (renderGpu()) return;
+      const shot = document.getElementById("shot");
+      const gl = shot.getContext("webgl2");
+      if (gl) {
+        const lose = gl.getExtension("WEBGL_lose_context");
+        if (lose) lose.loseContext();
+        const next = document.createElement("canvas");
+        next.id = "shot";
+        shot.replaceWith(next);
+      }
+      renderCpu();
+    }
+
+    function renderCpu() {
       const scale = WORK / SIDE;
       const sigma = 200 * scale;
       const pad = Math.max(1, Math.ceil(sigma * 3));
