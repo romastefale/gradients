@@ -71,10 +71,13 @@
       box-shadow: inset 0 0 0 1px var(--bar-edge);
     }
     .frame {
+      position: relative;
       width: 100%; aspect-ratio: var(--ratio); border-radius: 12px;
       overflow: hidden; background: var(--edge);
     }
-    .frame img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .frame img {
+      position: absolute; display: block; max-width: none;
+    }
     .meta {
       display: flex; align-items: center; gap: 6px;
       color: var(--bar-sub); font-size: 11px; font-weight: 500; line-height: 1;
@@ -251,147 +254,8 @@
       };
     }
 
-    function colorOf(hue) {
-      const s = (state.light ? 72 : 58) / 100;
-      const l = (state.light ? 58 : 42) / 100;
-      const a = s * Math.min(l, 1 - l);
-      const f = (n) => {
-        const k = (n + hue / 30) % 12;
-        return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-      };
-      return [f(0), f(8), f(4)];
-    }
-
-    function srgbToLinear(c) {
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    }
-
-    function linearToSrgb(c) {
-      return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-    }
-
-    function boxBlur(src, n, radius) {
-      const tmp = new Float32Array(src.length);
-      const out = new Float32Array(src.length);
-      const span = radius * 2 + 1;
-      for (let y = 0; y < n; y++) {
-        const row = y * n;
-        let acc = src[row] * (radius + 1);
-        for (let x = 0; x < radius; x++) acc += src[row + x];
-        for (let x = 0; x < n; x++) {
-          acc += src[row + Math.min(n - 1, x + radius)] - src[row + Math.max(0, x - radius - 1)];
-          tmp[row + x] = acc / span;
-        }
-      }
-      for (let x = 0; x < n; x++) {
-        let acc = tmp[x] * (radius + 1);
-        for (let y = 0; y < radius; y++) acc += tmp[y * n + x];
-        for (let y = 0; y < n; y++) {
-          acc += tmp[Math.min(n - 1, y + radius) * n + x] - tmp[Math.max(0, y - radius - 1) * n + x];
-          out[y * n + x] = acc / span;
-        }
-      }
-      return out;
-    }
-
-    function blurFast(src, n, sigma) {
-      const passes = 3;
-      const ideal = Math.sqrt((12 * sigma * sigma) / passes + 1);
-      let lower = Math.floor(ideal);
-      if (lower % 2 === 0) lower -= 1;
-      if (lower < 1) lower = 1;
-      const upper = lower + 2;
-      const count = Math.round((12 * sigma * sigma - passes * lower * lower - 4 * passes * lower - 3 * passes) / (-4 * lower - 4));
-      let cur = src;
-      for (let i = 0; i < passes; i++) {
-        const width = i < count ? upper : lower;
-        cur = boxBlur(cur, n, (width - 1) >> 1);
-      }
-      return cur;
-    }
-
-    function raster(view) {
-      const work = 384;
-      const scale = work / SIDE;
-      const sigma = 200 * scale;
-      const pad = Math.max(1, Math.ceil(sigma * 3));
-      const n = work + pad * 2;
-      const channel = [
-        new Float32Array(n * n),
-        new Float32Array(n * n),
-        new Float32Array(n * n),
-        new Float32Array(n * n),
-      ];
-      const alpha = state.light ? 0.85 : 0.75;
-      for (const bloom of state.blooms) {
-        const color = colorOf(bloom.hue);
-        const cx = pad + bloom.x * scale;
-        const cy = pad + bloom.y * scale;
-        const rx = bloom.rx * scale;
-        const ry = bloom.ry * scale;
-        const x0 = Math.max(0, Math.floor(cx - rx));
-        const x1 = Math.min(n - 1, Math.ceil(cx + rx));
-        const y0 = Math.max(0, Math.floor(cy - ry));
-        const y1 = Math.min(n - 1, Math.ceil(cy + ry));
-        for (let y = y0; y <= y1; y++) {
-          const dy = (y + 0.5 - cy) / ry;
-          const yy = dy * dy;
-          for (let x = x0; x <= x1; x++) {
-            const dx = (x + 0.5 - cx) / rx;
-            if (dx * dx + yy > 1) continue;
-            const i = y * n + x;
-            const da = channel[3][i];
-            const outA = alpha + da * (1 - alpha);
-            const inv = outA ? 1 / outA : 0;
-            for (let c = 0; c < 3; c++) {
-              channel[c][i] = (color[c] * alpha + channel[c][i] * da * (1 - alpha)) * inv;
-            }
-            channel[3][i] = outA;
-          }
-        }
-      }
-      for (let i = 0; i < n * n; i++) {
-        const cover = channel[3][i];
-        for (let c = 0; c < 3; c++) channel[c][i] = srgbToLinear(channel[c][i]) * cover;
-      }
-      const blurred = channel.map((band) => blurFast(band, n, sigma));
-      const solid = state.light ? [0xf4 / 255, 0xf3 / 255, 0xf1 / 255] : [0x14 / 255, 0x14 / 255, 0x16 / 255];
-      const cropX = Math.round(pad + view.sx * scale);
-      const cropY = Math.round(pad + view.sy * scale);
-      const cropW = Math.max(1, Math.round(view.sw * scale));
-      const cropH = Math.max(1, Math.round(view.sh * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = cropW;
-      canvas.height = cropH;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      const image = ctx.createImageData(cropW, cropH);
-      const data = image.data;
-      for (let y = 0; y < cropH; y++) {
-        for (let x = 0; x < cropW; x++) {
-          const i = (cropY + y) * n + (cropX + x);
-          const cover = Math.min(1, Math.max(0, blurred[3][i]));
-          const inv = cover > 1e-5 ? 1 / cover : 0;
-          const o = (y * cropW + x) * 4;
-          for (let c = 0; c < 3; c++) {
-            const straight = linearToSrgb(Math.min(1, Math.max(0, blurred[c][i] * inv)));
-            data[o + c] = Math.round((straight * cover + solid[c] * (1 - cover)) * 255);
-          }
-          data[o + 3] = 255;
-        }
-      }
-      ctx.putImageData(image, 0, 0);
-      return canvas;
-    }
-
-    let shown = 0;
-    let picture = null;
-
-    function showPicture() {
-      const token = ++shown;
-      const canvas = raster(frame());
-      if (token !== shown) return;
-      picture = canvas;
-      document.getElementById("shot").src = canvas.toDataURL("image/png");
+    function hsl(h, s, l) {
+      return `hsl(${Math.round(((h % 360) + 360) % 360)} ${s}% ${l}%)`;
     }
 
     function fresh() {
@@ -418,18 +282,40 @@
       return { sx: Math.round((SIDE - sw) / 2), sy: 0, sw, sh: SIDE };
     }
 
-    function paint() {
+    function markup(view) {
+      const solid = SOLID[state.light ? "light" : "dark"];
+      const shapes = state.blooms.map((bloom) => {
+        const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
+        return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
+      }).join("");
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${view.sw}" height="${view.sh}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
+    }
+
+    let squareUrl = "";
+
+    function renderSquare() {
+      if (squareUrl) return;
+      const url = URL.createObjectURL(new Blob([markup({ sx: 0, sy: 0, sw: SIDE, sh: SIDE })], { type: "image/svg+xml;charset=utf-8" }));
+      squareUrl = url;
+      document.getElementById("shot").src = url;
+    }
+
+    function place() {
       const solid = SOLID[state.light ? "light" : "dark"];
       const root = document.documentElement;
-      root.dataset.theme = state.light ? "light" : "dark";
       const view = frame();
+      root.dataset.theme = state.light ? "light" : "dark";
       root.style.colorScheme = state.light ? "light" : "dark";
       root.style.backgroundColor = solid;
       document.body.style.backgroundColor = solid;
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
-      showPicture();
+      const shot = document.getElementById("shot");
+      shot.style.width = `${SIDE / view.sw * 100}%`;
+      shot.style.height = `${SIDE / view.sh * 100}%`;
+      shot.style.left = `${-view.sx / view.sw * 100}%`;
+      shot.style.top = `${-view.sy / view.sh * 100}%`;
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
@@ -440,7 +326,6 @@
         button.textContent = on ? state.aspect : label;
       });
     }
-
     function download(name, blob) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -450,45 +335,43 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    function fileCanvas() {
-      const view = frame();
-      const small = picture || raster(view);
-      const longSide = Math.max(view.sw, view.sh);
-      const width = Math.max(1, Math.round(view.sw * longSide / Math.max(view.sw, view.sh)));
-      const height = Math.max(1, Math.round(view.sh * longSide / Math.max(view.sw, view.sh)));
-      if (small.width === width && small.height === height) return small;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(small, 0, 0, width, height);
-      return canvas;
-    }
-
     function pngFile() {
-      return new Promise((resolve) => fileCanvas().toBlob((blob) => resolve(blob), "image/png"));
+      const shot = document.getElementById("shot");
+      const view = frame();
+      const draw = () => new Promise((resolve) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = view.sw;
+        canvas.height = view.sh;
+        canvas.getContext("2d").drawImage(shot, view.sx, view.sy, view.sw, view.sh, 0, 0, view.sw, view.sh);
+        canvas.toBlob((blob) => resolve(blob), "image/png");
+      });
+      if (shot.complete && shot.naturalWidth) return draw();
+      return new Promise((resolve, reject) => {
+        shot.addEventListener("load", () => resolve(draw()), { once: true });
+        shot.addEventListener("error", () => reject(new Error("render")), { once: true });
+      });
     }
 
-    function pageFile(dataUrl) {
+    function pageFile() {
       const solid = SOLID[state.light ? "light" : "dark"];
+      const svg = encodeURIComponent(markup(frame()));
       return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gradient</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { background: ${solid} url("${dataUrl}") center / cover no-repeat; }
+  body { background: ${solid} url("data:image/svg+xml,${svg}") center / cover no-repeat; }
 </style>
 `;
     }
 
-    function cssFile(dataUrl) {
+    function cssFile() {
       const solid = SOLID[state.light ? "light" : "dark"];
+      const svg = encodeURIComponent(markup(frame()));
       return `html {
   background-color: ${solid};
-  background-image: url("${dataUrl}");
+  background-image: url("data:image/svg+xml,${svg}");
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -521,11 +404,9 @@
         if (kind === "png") {
           const png = await pngFile();
           if (png) download("gradient.png", png);
-        } else {
-          const dataUrl = (picture || raster(frame())).toDataURL("image/png");
-          if (kind === "html") download("gradient.html", new Blob([pageFile(dataUrl)], { type: "text/html" }));
-          if (kind === "css") download("gradient.css", new Blob([cssFile(dataUrl)], { type: "text/css" }));
         }
+        if (kind === "html") download("gradient.html", new Blob([pageFile()], { type: "text/html" }));
+        if (kind === "css") download("gradient.css", new Blob([cssFile()], { type: "text/css" }));
       } finally {
         buttons.forEach((button) => { button.disabled = false; });
       }
@@ -540,8 +421,9 @@
       button.onclick = () => {
         const other = turned(label);
         state.aspect = state.aspect === label || state.aspect === other ? turned(state.aspect) : label;
+        store("gradient-aspect", state.aspect);
         closeMenu();
-        paint();
+        place();
       };
       aspects.append(button);
     }
@@ -583,7 +465,8 @@
     store("gradient-seed", String(state.seed));
     store("gradient-aspect", state.aspect);
     fresh();
-    paint();
+    renderSquare();
+    place();
   </script>
 </body>
 </html>
