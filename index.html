@@ -26,10 +26,8 @@
       --chip-border: rgba(0, 0, 0, .12);
       --bar-bg-solid: #eef0f5;
       --sel-bg: rgba(255, 255, 255, .9);
-      --sel-shadow: 0 1px 2px rgba(20, 16, 60, .08), 0 2px 6px rgba(20, 16, 60, .08);
       --hover-bg: rgba(0, 0, 0, .05);
       --picker-bg: rgba(242, 243, 247, .9);
-      --glass-ease: cubic-bezier(.2, .8, .2, 1);
       --edge: #f4f3f1;
       color-scheme: light;
       --screen-inset: 12px;
@@ -44,7 +42,6 @@
       --chip-border: rgba(255, 255, 255, .14);
       --bar-bg-solid: #060607;
       --sel-bg: rgba(255, 255, 255, .16);
-      --sel-shadow: 0 1px 6px rgba(0, 0, 0, .28);
       --hover-bg: rgba(255, 255, 255, .07);
       --picker-bg: rgba(22, 22, 26, .88);
       --edge: #141416;
@@ -300,11 +297,7 @@
       document.body.style.backgroundColor = solid;
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
-      const field = `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`;
-      root.style.setProperty("--field", field);
-      const board = document.getElementById("frame");
-      board.style.backgroundColor = solid;
-      board.style.backgroundImage = field;
+      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`);
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute("content", solid);
