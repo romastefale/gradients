@@ -101,17 +101,16 @@
       position: relative; flex: 1 1 auto; min-width: 0;
       display: flex; align-items: center; gap: var(--pill-gap);
       margin: 0; padding: 0 2px;
-      overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
-      scrollbar-width: none; -ms-overflow-style: none;
+      overflow: hidden;
     }
-    .sh-nav::-webkit-scrollbar { display: none; width: 0; height: 0; }
     .sh-nav button, .sh-picker button {
       appearance: none; border: 0; margin: 0; background: transparent; color: var(--bar-sub);
       font: 500 13.5px/1 inherit; cursor: pointer; white-space: nowrap;
       -webkit-tap-highlight-color: transparent;
     }
     .sh-nav button {
-      flex: 0 0 auto; height: 34px; padding: 0 13px; border-radius: 17px;
+      flex: 1 1 0; min-width: 0; height: 34px; padding: 0 2px; border-radius: 17px;
+      text-align: center;
     }
     .sh-nav button[aria-current="true"] {
       background: var(--sel-bg); color: var(--bar-text); font-weight: 600;
@@ -182,13 +181,15 @@
     </div>
   </header>
   <script>
-    const SIDE = 4000;
+    const SIDE = 5120;
+    const UNIT = SIDE / 4000;
     const SOLID = { light: "#f4f3f1", dark: "#141416" };
     const ASPECTS = [
       ["1:1", 1, 1],
       ["16:9", 16, 9],
       ["4:3", 4, 3],
       ["3:2", 3, 2],
+      ["20:9", 20, 9],
     ];
 
     function turned(label) {
@@ -237,8 +238,8 @@
         hue: random() * 360,
         x: random() * SIDE,
         y: random() * SIDE,
-        rx: 900 + random() * 1100,
-        ry: 700 + random() * 900,
+        rx: (900 + random() * 1100) * UNIT,
+        ry: (700 + random() * 900) * UNIT,
       }));
     }
 
@@ -260,7 +261,8 @@
         const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
         return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
       }).join("");
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
+      const blur = Math.round(200 * UNIT);
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
     }
 
     function paint() {
