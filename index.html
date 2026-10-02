@@ -72,8 +72,9 @@
     }
     .frame {
       width: 100%; aspect-ratio: var(--ratio); border-radius: 12px;
-      background: var(--edge) var(--field) center / cover no-repeat;
+      overflow: hidden; background: var(--edge);
     }
+    .frame img { width: 100%; height: 100%; display: block; }
     .meta {
       display: flex; align-items: center; gap: 6px;
       color: var(--bar-sub); font-size: 11px; font-weight: 500; line-height: 1;
@@ -163,7 +164,7 @@
 <body>
   <main class="stage">
     <div class="shot">
-      <div class="plate"><div class="frame" id="frame"></div></div>
+      <div class="plate"><div class="frame" id="frame"><img id="shot" alt=""></div></div>
       <div class="meta">
         <span id="caption"></span>
         <span class="mini">
@@ -297,8 +298,8 @@
       document.body.style.backgroundColor = solid;
       root.style.setProperty("--edge", solid);
       root.style.setProperty("--ratio", String(view.sw / view.sh));
-      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, view))}")`);
       document.getElementById("caption").textContent = `${state.aspect} · ${view.sw}×${view.sh}`;
+      showPicture();
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute("content", solid);
       document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
@@ -319,26 +320,64 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    function pageFile() {
+    const PREVIEW = 1600;
+    let shown = 0;
+
+    function renderEndpoint() {
+      return location.hostname.endsWith("railway.app") ? "/render.png" : "https://gradients.up.railway.app/render.png";
+    }
+
+    function fitted(view, longSide) {
+      const scale = longSide / Math.max(view.sw, view.sh);
+      return {
+        width: Math.max(1, Math.round(view.sw * scale)),
+        height: Math.max(1, Math.round(view.sh * scale)),
+      };
+    }
+
+    async function renderPng(view, longSide) {
+      const size = fitted(view, longSide);
+      const response = await fetch(renderEndpoint(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ svg: markup(size.width, size.height, view), width: size.width }),
+      });
+      if (!response.ok) throw new Error("render");
+      return response.blob();
+    }
+
+    async function showPicture() {
+      const token = ++shown;
+      const view = frame();
+      let blob;
+      try { blob = await renderPng(view, PREVIEW); } catch (e) { return; }
+      if (token !== shown) return;
+      const url = URL.createObjectURL(blob);
+      const shot = document.getElementById("shot");
+      const previous = shot.dataset.url || "";
+      shot.src = url;
+      shot.dataset.url = url;
+      if (previous) URL.revokeObjectURL(previous);
+    }
+
+    function pageFile(dataUrl) {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const svg = markup(1600, 1600, frame());
       return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gradient</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { background: ${solid} url("data:image/svg+xml,${encodeURIComponent(svg)}") center / cover no-repeat; }
+  body { background: ${solid} url("${dataUrl}") center / cover no-repeat; }
 </style>
 `;
     }
 
-    function cssFile() {
+    function cssFile(dataUrl) {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const svg = markup(1600, 1600, frame());
       return `html {
   background-color: ${solid};
-  background-image: url("data:image/svg+xml,${encodeURIComponent(svg)}");
+  background-image: url("${dataUrl}");
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -347,25 +386,18 @@
 `;
     }
 
+    function blobDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+
     async function pngFile() {
       const view = frame();
-      const svg = markup(view.sw, view.sh, view);
-      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-      try {
-        const image = await new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error("render"));
-          img.src = url;
-        });
-        const canvas = document.createElement("canvas");
-        canvas.width = view.sw;
-        canvas.height = view.sh;
-        canvas.getContext("2d").drawImage(image, 0, 0, view.sw, view.sh);
-        return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+      return renderPng(view, Math.max(view.sw, view.sh));
     }
 
     function closeMenu() {
@@ -386,17 +418,19 @@
 
     async function deliver(kind) {
       closeMenu();
-      if (kind === "html") download("gradient.html", new Blob([pageFile()], { type: "text/html" }));
-      if (kind === "css") download("gradient.css", new Blob([cssFile()], { type: "text/css" }));
-      if (kind === "png") {
-        const buttons = [document.getElementById("save"), document.getElementById("save2")];
-        buttons.forEach((button) => { button.disabled = true; });
-        try {
+      const buttons = [document.getElementById("save"), document.getElementById("save2")];
+      buttons.forEach((button) => { button.disabled = true; });
+      try {
+        if (kind === "png") {
           const png = await pngFile();
           if (png) download("gradient.png", png);
-        } finally {
-          buttons.forEach((button) => { button.disabled = false; });
+        } else {
+          const dataUrl = await blobDataUrl(await renderPng(frame(), PREVIEW));
+          if (kind === "html") download("gradient.html", new Blob([pageFile(dataUrl)], { type: "text/html" }));
+          if (kind === "css") download("gradient.css", new Blob([cssFile(dataUrl)], { type: "text/css" }));
         }
+      } finally {
+        buttons.forEach((button) => { button.disabled = false; });
       }
     }
 
