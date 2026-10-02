@@ -4,182 +4,354 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4f3f1">
-  <title>Field</title>
+  <title>Gradients</title>
   <style>
-    :root { --edge: #f4f3f1; --ink: #1c1c1e; }
+    :root {
+      --bar-bg: rgba(238, 240, 245, .72);
+      --bar-text: #0a0b0d;
+      --bar-sub: rgba(0, 0, 0, .6);
+      --bar-edge: rgba(0, 0, 0, .1);
+      --chip-bg: rgba(255, 255, 255, .66);
+      --chip-border: rgba(0, 0, 0, .12);
+      --bar-bg-solid: #eef0f5;
+      --sel-bg: rgba(255, 255, 255, .9);
+      --sel-shadow: 0 1px 2px rgba(20, 16, 60, .08), 0 2px 6px rgba(20, 16, 60, .08);
+      --hover-bg: rgba(0, 0, 0, .05);
+      --picker-bg: rgba(242, 243, 247, .9);
+      --glass-ease: cubic-bezier(.2, .8, .2, 1);
+      --edge: #f4f3f1;
+    }
+    :root[data-theme="dark"] {
+      --bar-bg: rgba(6, 6, 7, .72);
+      --bar-text: #fff;
+      --bar-sub: rgba(255, 255, 255, .6);
+      --bar-edge: rgba(255, 255, 255, .1);
+      --chip-bg: rgba(255, 255, 255, .05);
+      --chip-border: rgba(255, 255, 255, .14);
+      --bar-bg-solid: #060607;
+      --sel-bg: rgba(255, 255, 255, .16);
+      --sel-shadow: 0 1px 6px rgba(0, 0, 0, .28);
+      --hover-bg: rgba(255, 255, 255, .07);
+      --picker-bg: rgba(22, 22, 26, .88);
+      --edge: #141416;
+    }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
-    html { background: var(--edge); color: var(--ink); }
+    html { background: var(--edge); color: var(--bar-text); }
     body {
       min-height: 100dvh;
-      background: var(--edge) var(--field) center / 100% 100% no-repeat;
-      font-family: system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      background: var(--edge);
+      font-family: system-ui, -apple-system, sans-serif;
     }
-    .dock {
-      position: fixed;
-      z-index: 2;
-      left: 50%;
-      bottom: max(18px, env(safe-area-inset-bottom));
-      transform: translateX(-50%);
-      display: flex;
-      gap: 4px;
-      max-width: calc(100vw - 24px);
-      padding: 5px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--edge) 78%, transparent);
-      border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
+    .stage {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      padding: calc(84px + env(safe-area-inset-top, 0px)) 16px 20px;
     }
-    button {
-      appearance: none;
-      border: 0;
-      margin: 0;
-      height: 36px;
-      padding: 0 14px;
-      border-radius: 999px;
-      background: transparent;
-      color: inherit;
-      font: 600 13px/1 inherit;
-      letter-spacing: -0.01em;
-      cursor: pointer;
-      white-space: nowrap;
+    .frame {
+      background: var(--edge) var(--field) center / cover no-repeat;
+      aspect-ratio: var(--ratio);
+      width: min(calc(100vw - 32px), calc((100dvh - 124px) * var(--ratio)));
+      max-height: calc(100dvh - 124px);
     }
-    button[aria-pressed="true"], button:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
-    button:disabled { opacity: 0.45; }
+    .site-header {
+      position: fixed; z-index: 70; left: 0; right: 0;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      display: flex; justify-content: center; pointer-events: none;
+      padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+    }
+    .sh-anchor { position: relative; min-width: 0; max-width: min(100%, 1040px); pointer-events: auto; }
+    .sh-bar {
+      --pill-gap: 6px;
+      display: flex; align-items: center; gap: var(--pill-gap);
+      min-width: 0; max-width: 100%; height: 52px; padding: 0 9px; border-radius: 26px;
+      background: var(--bar-bg); color: var(--bar-text);
+      -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+      box-shadow: inset 0 0 0 1px var(--bar-edge);
+    }
+    .sh-nav {
+      position: relative; flex: 1 1 auto; min-width: 0;
+      display: flex; align-items: center; gap: var(--pill-gap);
+      margin: 0 calc(-1 * var(--pill-gap)); padding: 9px var(--pill-gap);
+      overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    }
+    .sh-nav::-webkit-scrollbar { display: none; }
+    .sh-nav button, .sh-picker button {
+      appearance: none; border: 0; margin: 0; background: transparent; color: var(--bar-sub);
+      font: 500 13.5px/1 inherit; cursor: pointer; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .sh-nav button {
+      flex: 0 0 auto; height: 34px; padding: 0 13px; border-radius: 17px;
+    }
+    .sh-nav button[aria-current="true"] {
+      background: var(--sel-bg); color: var(--bar-text); font-weight: 600; box-shadow: var(--sel-shadow);
+    }
+    .sh-nav button:not([aria-current="true"]):hover { background: var(--hover-bg); color: var(--bar-text); }
+    .sh-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--pill-gap); }
+    .sh-pill {
+      flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; padding: 0; border-radius: 999px; box-sizing: border-box;
+      border: 1px solid var(--chip-border); background: var(--chip-bg); color: var(--bar-text);
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .sh-pill[aria-expanded="true"] { background: var(--bar-text); color: var(--bar-bg-solid); border-color: transparent; }
+    .sh-pill:focus-visible, .sh-nav button:focus-visible, .sh-picker button:focus-visible {
+      outline: none; box-shadow: inset 0 0 0 1.5px var(--bar-sub);
+    }
+    .sh-picker {
+      position: absolute; z-index: 2; top: calc(100% + 8px); right: 0;
+      min-width: 148px; padding: 6px; border-radius: 22px;
+      background: var(--picker-bg); color: var(--bar-text);
+      box-shadow: inset 0 0 0 1px var(--bar-edge);
+      -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+    }
+    .sh-picker button {
+      display: block; width: 100%; min-height: 44px; padding: 0 16px; border-radius: 16px;
+      text-align: left; color: var(--bar-text); font-size: 15px;
+    }
+    .sh-picker button:hover { background: var(--hover-bg); }
+    @media (max-width: 760px) {
+      .sh-anchor { flex: 1 1 auto; width: 100%; }
+      .sh-bar { width: 100%; padding: 0 8px; }
+    }
   </style>
 </head>
 <body>
-  <div class="dock">
-    <button type="button" id="again">New</button>
-    <button type="button" id="edges" aria-pressed="true">Edges</button>
-    <button type="button" id="theme">Dark</button>
-    <button type="button" id="save">4K</button>
-    <button type="button" id="html">HTML</button>
-  </div>
+  <main class="stage"><div class="frame" id="frame"></div></main>
+  <header class="site-header">
+    <div class="sh-anchor">
+      <div class="sh-bar">
+        <nav class="sh-nav" id="aspects" aria-label="Aspect"></nav>
+        <div class="sh-actions">
+          <button class="sh-pill" id="theme" type="button" aria-label="Theme"></button>
+          <button class="sh-pill" id="again" type="button" aria-label="New"></button>
+          <button class="sh-pill" id="save" type="button" aria-label="Download" aria-expanded="false" aria-controls="menu"></button>
+        </div>
+      </div>
+      <div class="sh-picker" id="menu" hidden>
+        <button type="button" data-kind="png">PNG</button>
+        <button type="button" data-kind="html">HTML</button>
+        <button type="button" data-kind="css">CSS</button>
+      </div>
+    </div>
+  </header>
   <script>
+    const SIDE = 4000;
     const SOLID = { light: "#f4f3f1", dark: "#141416" };
-    const INK = { light: "#1c1c1e", dark: "#f4f3f1" };
+    const ASPECTS = [
+      ["1:1", 1, 1],
+      ["16:9", 16, 9],
+      ["9:16", 9, 16],
+      ["4:3", 4, 3],
+      ["3:4", 3, 4],
+      ["3:2", 3, 2],
+      ["2:3", 2, 3],
+    ];
+    const ICON = {
+      sun: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+      moon: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+      again: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8"/><path d="M20 3v5h-5"/></svg>',
+      down: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>',
+    };
 
     const state = {
       light: !matchMedia("(prefers-color-scheme: dark)").matches,
-      edges: true,
-      hues: fresh(),
+      aspect: "1:1",
+      seed: 0,
+      blooms: [],
     };
 
-    function fresh() {
-      return [0, 1, 2, 3, 4, 5].map(() => Math.random() * 360);
+    function rand32() {
+      const next = new Uint32Array(1);
+      crypto.getRandomValues(next);
+      return next[0] || 1;
+    }
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return () => {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
     }
 
     function hsl(h, s, l) {
       return `hsl(${Math.round(((h % 360) + 360) % 360)} ${s}% ${l}%)`;
     }
 
-    function field(w, h) {
+    function fresh() {
+      const random = mulberry32(state.seed);
+      const count = 6 + Math.floor(random() * 2);
+      state.blooms = Array.from({ length: count }, () => ({
+        hue: random() * 360,
+        x: random() * SIDE,
+        y: random() * SIDE,
+        rx: 900 + random() * 1100,
+        ry: 700 + random() * 900,
+      }));
+    }
+
+    function frame() {
+      const found = ASPECTS.find((item) => item[0] === state.aspect) || ASPECTS[0];
+      const rw = found[1];
+      const rh = found[2];
+      if (rw >= rh) {
+        const sh = Math.round(SIDE * rh / rw);
+        return { sx: 0, sy: Math.round((SIDE - sh) / 2), sw: SIDE, sh };
+      }
+      const sw = Math.round(SIDE * rw / rh);
+      return { sx: Math.round((SIDE - sw) / 2), sy: 0, sw, sh: SIDE };
+    }
+
+    function markup(width, height, view) {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const blooms = state.hues.map((hue, index) => {
-        const x = (180 + ((index * 160) % 640)) / 1000 * w;
-        const y = (340 + index * 180) / 1600 * h;
-        const color = hsl(hue, state.light ? 72 : 58, state.light ? 58 : 42);
-        return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(340 / 1000 * w).toFixed(1)}" ry="${(220 / 1600 * h).toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
+      const shapes = state.blooms.map((bloom) => {
+        const color = hsl(bloom.hue, state.light ? 72 : 58, state.light ? 58 : 42);
+        return `<ellipse cx="${bloom.x.toFixed(1)}" cy="${bloom.y.toFixed(1)}" rx="${bloom.rx.toFixed(1)}" ry="${bloom.ry.toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
       }).join("");
-      const blur = (80 / 1600 * h).toFixed(2);
-      const fade = state.edges
-        ? `<linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${solid}"/><stop offset=".08" stop-color="${solid}"/><stop offset=".28" stop-color="${solid}" stop-opacity="0"/></linearGradient><linearGradient id="bot" x1="0" y1="0" x2="0" y2="1"><stop offset=".72" stop-color="${solid}" stop-opacity="0"/><stop offset=".92" stop-color="${solid}"/><stop offset="1" stop-color="${solid}"/></linearGradient>`
-        : "";
-      const veils = state.edges
-        ? `<rect width="${w}" height="${h}" fill="url(#top)"/><rect width="${w}" height="${h}" fill="url(#bot)"/>`
-        : "";
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${blur}"/></filter>${fade}</defs><rect width="${w}" height="${h}" fill="${solid}"/><g filter="url(#f)">${blooms}</g>${veils}</svg>`;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${view.sx} ${view.sy} ${view.sw} ${view.sh}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="200"/></filter></defs><rect x="${view.sx}" y="${view.sy}" width="${view.sw}" height="${view.sh}" fill="${solid}"/><g filter="url(#f)">${shapes}</g></svg>`;
     }
 
-    function page() {
+    function paint() {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const svg = field(1000, 1600);
       const root = document.documentElement;
+      root.dataset.theme = state.light ? "light" : "dark";
+      const view = frame();
       root.style.setProperty("--edge", solid);
-      root.style.setProperty("--ink", INK[state.light ? "light" : "dark"]);
-      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
-      document.querySelector('meta[name="theme-color"]').setAttribute("content", state.edges ? solid : solid);
-      document.getElementById("edges").setAttribute("aria-pressed", state.edges ? "true" : "false");
-      document.getElementById("edges").textContent = state.edges ? "Edges" : "Image";
-      document.getElementById("theme").textContent = state.light ? "Dark" : "Light";
+      root.style.setProperty("--ratio", String(view.sw / view.sh));
+      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(markup(1200, 1200, frame()))}")`);
+      document.querySelector('meta[name="theme-color"]').setAttribute("content", solid);
+      document.getElementById("theme").innerHTML = state.light ? ICON.moon : ICON.sun;
+      document.querySelectorAll("#aspects button").forEach((button) => {
+        button.setAttribute("aria-current", button.dataset.aspect === state.aspect ? "true" : "false");
+      });
     }
 
-    function htmlPage() {
+    function download(name, blob) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function pageFile() {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const svg = field(1000, 1600);
+      const svg = markup(1600, 1600, frame());
       return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="${solid}">
-<title>Field</title>
+<title>Gradient</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  html { background: ${solid}; }
-  body { min-height: 100dvh; background: ${solid} url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 100% 100% no-repeat; }
+  body { background: ${solid} url("data:image/svg+xml,${encodeURIComponent(svg)}") center / cover no-repeat; }
 </style>
 `;
     }
 
-    document.getElementById("again").onclick = () => {
-      state.hues = fresh();
-      page();
-    };
-    document.getElementById("edges").onclick = () => {
-      state.edges = !state.edges;
-      page();
-    };
-    document.getElementById("theme").onclick = () => {
-      state.light = !state.light;
-      page();
-    };
-    document.getElementById("save").onclick = async (event) => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      const svg = field(3840, 2160);
-      const blob = new Blob([svg], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
+    function cssFile() {
+      const solid = SOLID[state.light ? "light" : "dark"];
+      const svg = markup(1600, 1600, frame());
+      return `html {
+  background-color: ${solid};
+  background-image: url("data:image/svg+xml,${encodeURIComponent(svg)}");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  min-height: 100%;
+}
+`;
+    }
+
+    async function pngFile() {
+      const view = frame();
+      const svg = markup(view.sw, view.sh, view);
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
       try {
         const image = await new Promise((resolve, reject) => {
           const img = new Image();
           img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error("image"));
+          img.onerror = () => reject(new Error("render"));
           img.src = url;
         });
         const canvas = document.createElement("canvas");
-        canvas.width = 3840;
-        canvas.height = 2160;
-        canvas.getContext("2d").drawImage(image, 0, 0, 3840, 2160);
-        const png = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-        const file = URL.createObjectURL(png);
-        const link = document.createElement("a");
-        link.href = file;
-        link.download = "field-4k.png";
-        link.click();
-        URL.revokeObjectURL(file);
+        canvas.width = view.sw;
+        canvas.height = view.sh;
+        canvas.getContext("2d").drawImage(image, 0, 0, view.sw, view.sh);
+        return await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
       } finally {
         URL.revokeObjectURL(url);
-        button.disabled = false;
       }
-    };
-    document.getElementById("html").onclick = async (event) => {
-      const button = event.currentTarget;
-      const text = htmlPage();
-      try {
-        await navigator.clipboard.writeText(text);
-        button.textContent = "Copied";
-      } catch {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([text], { type: "text/html" }));
-        link.download = "field.html";
-        link.click();
-        button.textContent = "Saved";
-      }
-      setTimeout(() => { button.textContent = "HTML"; }, 1200);
-    };
+    }
 
-    page();
+    function closeMenu() {
+      document.getElementById("menu").hidden = true;
+      document.getElementById("save").setAttribute("aria-expanded", "false");
+    }
+
+    const aspects = document.getElementById("aspects");
+    for (const [label] of ASPECTS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.aspect = label;
+      button.textContent = label;
+      button.onclick = () => {
+        state.aspect = label;
+        closeMenu();
+        paint();
+      };
+      aspects.append(button);
+    }
+
+    document.getElementById("theme").onclick = () => {
+      state.light = !state.light;
+      paint();
+    };
+    document.getElementById("again").innerHTML = ICON.again;
+    document.getElementById("save").innerHTML = ICON.down;
+    document.getElementById("again").onclick = () => {
+      state.seed = rand32();
+      fresh();
+      closeMenu();
+      paint();
+    };
+    document.getElementById("save").onclick = () => {
+      const menu = document.getElementById("menu");
+      const open = menu.hidden;
+      menu.hidden = !open;
+      document.getElementById("save").setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    document.getElementById("menu").onclick = async (event) => {
+      const kind = event.target.closest("button")?.dataset.kind;
+      if (!kind) return;
+      closeMenu();
+      if (kind === "html") download("gradient.html", new Blob([pageFile()], { type: "text/html" }));
+      if (kind === "css") download("gradient.css", new Blob([cssFile()], { type: "text/css" }));
+      if (kind === "png") {
+        const button = document.getElementById("save");
+        button.disabled = true;
+        try {
+          const png = await pngFile();
+          if (png) download("gradient.png", png);
+        } finally {
+          button.disabled = false;
+        }
+      }
+    };
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".sh-anchor")) closeMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeMenu();
+    });
+
+    state.seed = rand32();
+    fresh();
+    paint();
   </script>
 </body>
 </html>
