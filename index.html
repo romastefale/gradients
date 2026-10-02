@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f3f1">
+  <title>Field</title>
+  <style>
+    :root { --edge: #f4f3f1; --ink: #1c1c1e; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    html { background: var(--edge); color: var(--ink); }
+    body {
+      min-height: 100dvh;
+      background: var(--edge) var(--field) center / 100% 100% no-repeat;
+      font-family: system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    }
+    .dock {
+      position: fixed;
+      z-index: 2;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      max-width: calc(100vw - 24px);
+      padding: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--edge) 78%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    button {
+      appearance: none;
+      border: 0;
+      margin: 0;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: transparent;
+      color: inherit;
+      font: 600 13px/1 inherit;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button[aria-pressed="true"], button:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+    button:disabled { opacity: 0.45; }
+  </style>
+</head>
+<body>
+  <div class="dock">
+    <button type="button" id="again">New</button>
+    <button type="button" id="edges" aria-pressed="true">Edges</button>
+    <button type="button" id="theme">Dark</button>
+    <button type="button" id="save">4K</button>
+    <button type="button" id="html">HTML</button>
+  </div>
+  <script>
+    const SOLID = { light: "#f4f3f1", dark: "#141416" };
+    const INK = { light: "#1c1c1e", dark: "#f4f3f1" };
+
+    const state = {
+      light: !matchMedia("(prefers-color-scheme: dark)").matches,
+      edges: true,
+      hues: fresh(),
+    };
+
+    function fresh() {
+      return [0, 1, 2, 3, 4, 5].map(() => Math.random() * 360);
+    }
+
+    function hsl(h, s, l) {
+      return `hsl(${Math.round(((h % 360) + 360) % 360)} ${s}% ${l}%)`;
+    }
+
+    function field(w, h) {
+      const solid = SOLID[state.light ? "light" : "dark"];
+      const blooms = state.hues.map((hue, index) => {
+        const x = (180 + ((index * 160) % 640)) / 1000 * w;
+        const y = (340 + index * 180) / 1600 * h;
+        const color = hsl(hue, state.light ? 72 : 58, state.light ? 58 : 42);
+        return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(340 / 1000 * w).toFixed(1)}" ry="${(220 / 1600 * h).toFixed(1)}" fill="${color}" fill-opacity="${state.light ? 0.85 : 0.75}"/>`;
+      }).join("");
+      const blur = (80 / 1600 * h).toFixed(2);
+      const fade = state.edges
+        ? `<linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${solid}"/><stop offset=".08" stop-color="${solid}"/><stop offset=".28" stop-color="${solid}" stop-opacity="0"/></linearGradient><linearGradient id="bot" x1="0" y1="0" x2="0" y2="1"><stop offset=".72" stop-color="${solid}" stop-opacity="0"/><stop offset=".92" stop-color="${solid}"/><stop offset="1" stop-color="${solid}"/></linearGradient>`
+        : "";
+      const veils = state.edges
+        ? `<rect width="${w}" height="${h}" fill="url(#top)"/><rect width="${w}" height="${h}" fill="url(#bot)"/>`
+        : "";
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><filter id="f" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="${blur}"/></filter>${fade}</defs><rect width="${w}" height="${h}" fill="${solid}"/><g filter="url(#f)">${blooms}</g>${veils}</svg>`;
+    }
+
+    function page() {
+      const solid = SOLID[state.light ? "light" : "dark"];
+      const svg = field(1000, 1600);
+      const root = document.documentElement;
+      root.style.setProperty("--edge", solid);
+      root.style.setProperty("--ink", INK[state.light ? "light" : "dark"]);
+      root.style.setProperty("--field", `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
+      document.querySelector('meta[name="theme-color"]').setAttribute("content", state.edges ? solid : solid);
+      document.getElementById("edges").setAttribute("aria-pressed", state.edges ? "true" : "false");
+      document.getElementById("edges").textContent = state.edges ? "Edges" : "Image";
+      document.getElementById("theme").textContent = state.light ? "Dark" : "Light";
+    }
+
+    function htmlPage() {
+      const solid = SOLID[state.light ? "light" : "dark"];
+      const svg = field(1000, 1600);
+      return `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="${solid}">
+<title>Field</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  html { background: ${solid}; }
+  body { min-height: 100dvh; background: ${solid} url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 100% 100% no-repeat; }
+</style>
+`;
+    }
+
+    document.getElementById("again").onclick = () => {
+      state.hues = fresh();
+      page();
+    };
+    document.getElementById("edges").onclick = () => {
+      state.edges = !state.edges;
+      page();
+    };
+    document.getElementById("theme").onclick = () => {
+      state.light = !state.light;
+      page();
+    };
+    document.getElementById("save").onclick = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const svg = field(3840, 2160);
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      try {
+        const image = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("image"));
+          img.src = url;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = 3840;
+        canvas.height = 2160;
+        canvas.getContext("2d").drawImage(image, 0, 0, 3840, 2160);
+        const png = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+        const file = URL.createObjectURL(png);
+        const link = document.createElement("a");
+        link.href = file;
+        link.download = "field-4k.png";
+        link.click();
+        URL.revokeObjectURL(file);
+      } finally {
+        URL.revokeObjectURL(url);
+        button.disabled = false;
+      }
+    };
+    document.getElementById("html").onclick = async (event) => {
+      const button = event.currentTarget;
+      const text = htmlPage();
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([text], { type: "text/html" }));
+        link.download = "field.html";
+        link.click();
+        button.textContent = "Saved";
+      }
+      setTimeout(() => { button.textContent = "HTML"; }, 1200);
+    };
+
+    page();
+  </script>
+</body>
+</html>
