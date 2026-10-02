@@ -20,6 +20,8 @@
       --picker-bg: rgba(242, 243, 247, .9);
       --glass-ease: cubic-bezier(.2, .8, .2, 1);
       --edge: #f4f3f1;
+      --screen-inset: 12px;
+      --hair-gap: 9px;
     }
     :root[data-theme="dark"] {
       --bar-bg: rgba(6, 6, 7, .72);
@@ -45,14 +47,14 @@
     }
     .stage {
       position: fixed; inset: 0; display: grid; place-items: center;
-      padding: calc(84px + env(safe-area-inset-top, 0px)) 16px 20px;
+      padding: calc(84px + env(safe-area-inset-top, 0px)) max(var(--screen-inset), env(safe-area-inset-right, 0px)) 20px max(var(--screen-inset), env(safe-area-inset-left, 0px));
     }
     .shot {
       display: flex; flex-direction: column; align-items: center; gap: 7px;
-      width: min(calc(100vw - 48px), calc((100dvh - 176px) * var(--ratio)));
+      width: min(100%, calc((100dvh - 176px) * var(--ratio)));
     }
     .plate {
-      width: 100%; padding: 7px; border-radius: 18px;
+      width: 100%; padding: var(--hair-gap); border-radius: 18px;
       box-shadow: inset 0 0 0 1px var(--bar-edge);
     }
     .frame {
@@ -83,13 +85,13 @@
       position: fixed; z-index: 70; left: 0; right: 0;
       top: calc(12px + env(safe-area-inset-top, 0px));
       display: flex; justify-content: center; pointer-events: none;
-      padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+      padding: 0 max(var(--screen-inset), env(safe-area-inset-right, 0px)) 0 max(var(--screen-inset), env(safe-area-inset-left, 0px));
     }
     .sh-anchor { position: relative; min-width: 0; max-width: min(100%, 1040px); pointer-events: auto; }
     .sh-bar {
       --pill-gap: 6px;
       display: flex; align-items: center; gap: var(--pill-gap);
-      min-width: 0; max-width: 100%; height: 52px; padding: 0 9px; border-radius: 26px;
+      min-width: 0; max-width: 100%; height: 52px; padding: 0 var(--hair-gap); border-radius: 26px;
       background: var(--bar-bg); color: var(--bar-text);
       overflow: hidden;
       -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
@@ -139,8 +141,9 @@
     }
     .sh-picker button:hover { background: var(--hover-bg); }
     @media (max-width: 760px) {
+      :root { --hair-gap: 8px; }
       .sh-anchor { flex: 1 1 auto; width: 100%; }
-      .sh-bar { width: 100%; padding: 0 8px; }
+      .sh-bar { width: 100%; }
     }
   </style>
 </head>
