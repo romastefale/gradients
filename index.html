@@ -562,31 +562,74 @@
     }
 
     function pageFile() {
-      const solid = SOLID[state.light ? "light" : "dark"];
-      const image = cropCanvas(WORK).toDataURL("image/png");
       return `<!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gradient</title>
 <style>
   html, body { margin: 0; height: 100%; }
-  body { background: ${solid} url("${image}") center / cover no-repeat; }
+  ${look()}
 </style>
+</head>
+<body></body>
+</html>
 `;
     }
 
     function cssFile() {
+      return `${look()}\n`;
+    }
+
+    function erf(x) {
+      const sign = x < 0 ? -1 : 1;
+      const a = Math.abs(x);
+      const t = 1 / (1 + 0.3275911 * a);
+      const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-a * a);
+      return sign * y;
+    }
+
+    function bloomLayer(bloom, view) {
+      const color = colorOf(bloom.hue).map((channel) => Math.round(Math.min(1, Math.max(0, channel)) * 255));
+      const opacity = state.light ? 0.85 : 0.75;
+      const sigma = 200;
+      const radius = (bloom.rx + bloom.ry) / 2;
+      const outer = radius + sigma * 3;
+      const stops = [];
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        const fade = i === 12 ? 0 : opacity * 0.5 * (1 - erf((t * outer - radius) / (sigma * Math.SQRT2)));
+        stops.push(`rgba(${color[0]}, ${color[1]}, ${color[2]}, ${fade.toFixed(3)}) ${(t * 100).toFixed(1)}%`);
+      }
+      const width = (bloom.rx + sigma * 3) / view.sw * 100;
+      const height = (bloom.ry + sigma * 3) / view.sh * 100;
+      const x = (bloom.x - view.sx) / view.sw * 100;
+      const y = (bloom.y - view.sy) / view.sh * 100;
+      return `radial-gradient(ellipse ${width.toFixed(2)}% ${height.toFixed(2)}% at ${x.toFixed(2)}% ${y.toFixed(2)}%, ${stops.join(", ")})`;
+    }
+
+    function look() {
       const solid = SOLID[state.light ? "light" : "dark"];
-      const image = cropCanvas(WORK).toDataURL("image/png");
+      const view = frame();
+      const ratio = view.sw / view.sh;
+      const image = [...state.blooms].reverse().map((bloom) => bloomLayer(bloom, view)).join(",\n    ");
       return `html {
-  background-color: ${solid};
-  background-image: url("${image}");
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
+  background: ${solid};
   min-height: 100%;
 }
-`;
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(100vw, calc(100vh * ${ratio.toFixed(6)}));
+  height: min(100vh, calc(100vw / ${ratio.toFixed(6)}));
+  background-color: ${solid};
+  background-image:
+    ${image};
+  background-repeat: no-repeat;
+}`;
     }
 
     function closeMenu() {
